@@ -115,7 +115,7 @@ impl Default for SpiderConfig {
 /// จะอ่าน config จาก "config/app.yaml" (ถ้าไฟล์มี) แล้วเริ่ม crawl จากหน้าแรกของ base_url
 pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error::Error>> {
     // โหลด config จากไฟล์ ถ้ามี
-    let cfg: SpiderConfig = match fs::read_to_string("config/app.yaml") {
+    let cfg: SpiderConfig = match fs::read_to_string("src/config/app.yaml") {
         Ok(s) => match serde_yaml::from_str(&s) {
             Ok(parsed) => parsed,
             Err(e) => {
