@@ -122,7 +122,7 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
         let html_results = match chosen_mode {
             FetchMode::Chrome => {
                 println!("[crawler] launching chrome_fetcher for {} URLs", sitemap_urls.len());
-                chrome_fetcher::fetch_with_chrome(sitemap_urls, &user_agent).await?
+                chrome_fetcher::fetch_with_chrome(sitemap_urls, &user_agent, delay_ms).await?
             }
             _ => {
                 println!("[crawler] using http fetcher for {} URLs", sitemap_urls.len());

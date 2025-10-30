@@ -1,5 +1,5 @@
 depth: 3
-user_agent: "KUY/1.0"
+user_agent: "SSS/1.0"
 delay_ms: 250
 max_pages: 200
 fetch_mode: "Chrome"  # หรือ "Chrome"
