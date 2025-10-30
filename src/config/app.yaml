@@ -1,0 +1,8 @@
+yaml
+# filepath: d:\vibescode\x\HiHi\config\app.yaml
+# optional - ถ้าไม่มี จะใช้ค่า default
+depth: 3
+user_agent: "MyRustCrawler/1.0"
+delay_ms: 250
+max_pages: 200
+fetch_mode: "HttpRequest"  # หรือ "Chrome"

@@ -1,5 +1,7 @@
 use spider::url::Url;
 use spider::website::Website;
+use serde::Deserialize;
+use std::fs;
 
 /// โหลด `robots.txt` จาก base_url และคืน Vec<String> ของ sitemap URLs
 pub async fn get_sitemaps_from_robots(
@@ -87,4 +89,109 @@ pub async fn fetch_sitemap_direct(base_url: &str) -> Result<Vec<String>, Box<dyn
     }
 
     Ok(sitemap_urls)
+}
+
+/// Config สำหรับการ crawl แบบ native โดย spider
+#[derive(Debug, Deserialize)]
+struct SpiderConfig {
+    depth: Option<usize>,
+    user_agent: Option<String>,
+    delay_ms: Option<u64>,
+    max_pages: Option<usize>,
+}
+
+impl Default for SpiderConfig {
+    fn default() -> Self {
+        Self {
+            depth: Some(3),
+            user_agent: Some("MyRustCrawler/1.0".into()),
+            delay_ms: Some(200),
+            max_pages: Some(100),
+        }
+    }
+}
+
+/// ถ้าไม่มี robots.txt และไม่มี sitemap.xml -> ใช้ spider native crawl
+/// จะอ่าน config จาก "config/app.yaml" (ถ้าไฟล์มี) แล้วเริ่ม crawl จากหน้าแรกของ base_url
+pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // โหลด config จากไฟล์ ถ้ามี
+    let cfg: SpiderConfig = match fs::read_to_string("config/app.yaml") {
+        Ok(s) => match serde_yaml::from_str(&s) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                eprintln!("-> ไม่สามารถ parse config/app.yaml: {}  -> ใช้ค่า default", e);
+                SpiderConfig::default()
+            }
+        },
+        Err(_) => {
+            println!("-> ไม่พบ config/app.yaml, ใช้ค่า default");
+            SpiderConfig::default()
+        }
+    };
+
+    println!("- เริ่ม native spider crawl ที่: {}", base_url);
+    println!("- config: depth={:?}, user_agent={:?}, delay_ms={:?}, max_pages={:?}",
+        cfg.depth, cfg.user_agent, cfg.delay_ms, cfg.max_pages);
+
+    let mut website = Website::new(base_url);
+    website.with_user_agent(cfg.user_agent.as_deref());
+    if let Some(d) = cfg.depth {
+        website.with_depth(d);
+    }
+    // ตั้งค่า delay ถ้า config มี (ใช้ u64 โดยตรง)
+    if let Some(ms) = cfg.delay_ms {
+        website.configuration.delay = ms;
+    }
+
+    website.scrape().await;
+
+    // แสดง URL ที่ถูกดาวน์โหลด
+    if let Some(pages) = website.get_pages() {
+        for page in pages {
+            let url = page.get_url();
+            println!("-> visited: {}", url);
+        }
+    } else {
+        println!("-> spider ไม่ได้ดาวน์โหลดหน้าใด ๆ");
+    }
+
+    Ok(())
+}
+
+/// โหลด HTML จากแต่ละ URL ใน Vec<String>
+/// ใช้ HttpRequest เท่านั้น
+/// คืนค่า Vec<(String, String)> ของ (url, html_content)
+pub async fn fetch_html_from_urls(
+    urls: Vec<String>,
+) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    let mut results = Vec::new();
+    let total_urls = urls.len();  // คำนวณก่อน loop
+
+    println!("- เริ่มโหลด HTML จาก {} URL(s) โดยใช้ HttpRequest", total_urls);
+
+    for url in urls {
+        println!("  -> กำลังโหลด: {}", url);
+
+        let mut website = Website::new(&url);
+        website.with_user_agent(Some("MyRustCrawler/1.0"));
+        website.with_depth(0);  // โหลดเฉพาะหน้าเดียว
+
+        website.scrape().await;
+
+        // ดึง HTML content
+        if let Some(pages) = website.get_pages() {
+            if let Some(page) = pages.first() {
+                let html = page.get_html();
+                println!("  -> โหลดสำเร็จ: {} ({} bytes)", url, html.len());
+                results.push((url.clone(), html.to_string()));
+            } else {
+                eprintln!("  -> ไม่พบหน้าสำหรับ URL: {}", url);
+            }
+        } else {
+            eprintln!("  -> ไม่สามารถโหลดหน้าได้: {}", url);
+        }
+    }
+
+    println!("- โหลด HTML เสร็จสิ้น: {}/{} URL(s)", results.len(), total_urls);
+    Ok(results)
 }
