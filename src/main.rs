@@ -1,4 +1,3 @@
-mod robots;
 mod crawler;
 
 use std::env;
@@ -9,7 +8,8 @@ async fn main() {
         .nth(1)
         .unwrap_or_else(|| "https://www.rust-lang.org/".to_string());
 
-    if let Err(e) = crawler::run_crawler(&domain).await {
+    // เรียกผ่านโมดูลย่อยที่อยู่ใน crawler/
+    if let Err(e) = crate::crawler::crawler::run_crawler(&domain).await {
         eprintln!("Error: {:?}", e);
     }
 }

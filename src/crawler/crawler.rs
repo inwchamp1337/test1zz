@@ -2,7 +2,7 @@
 pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("เริ่มต้น Crawler สำหรับ: {}", domain);
 
-    match crate::robots::get_sitemaps_from_robots(domain).await {
+    match super::robots::get_sitemaps_from_robots(domain).await {
         Ok(sitemaps) => {
             if sitemaps.is_empty() {
                 println!("-> ไม่พบ Sitemap URL ใน robots.txt");
