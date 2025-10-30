@@ -1,0 +1,25 @@
+spa_domains:
+  - "www.heygoody.com"
+  - "app.example.com"
+  - "react-app.test.com"
+
+ssr_domains:
+  - "www.rust-lang.org"
+  - "docs.rs"
+  - "github.com"
+  - "stackoverflow.com"
+
+output_directory: "output"
+
+spider_config:
+  depth: 3
+  delay_ms: 200
+  user_agent: "RustWebCrawler/1.0"
+  timeout_seconds: 30
+  max_concurrent_requests: 10
+  respect_robots_txt: true
+
+logging:
+  level: "info"
+  enable_file_logging: false
+  log_file: "crawler.log"
