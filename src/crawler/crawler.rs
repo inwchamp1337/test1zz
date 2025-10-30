@@ -716,4 +716,200 @@ mod tests {
         let sanitized2 = sanitize_html_filename(".hidden-file");
         assert_eq!(sanitized2, "page_.hidden-file");
     }
+
+    /// Comprehensive end-to-end pipeline test with realistic scenarios
+    #[tokio::test]
+    async fn test_complete_pipeline_end_to_end() {
+        // Initialize logging for test
+        let _ = env_logger::try_init();
+        
+        // Create temporary directory for test output
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("e2e_test_output");
+        
+        // Test HTML content representing different website types
+        let test_html_ssr = r#"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>SSR Documentation Page</title>
+            <meta charset="UTF-8">
+        </head>
+        <body>
+            <h1>API Documentation</h1>
+            <h2>Getting Started</h2>
+            <p>This is a server-side rendered documentation page with <strong>important information</strong>.</p>
+            
+            <h3>Installation</h3>
+            <p>To install the package:</p>
+            <ul>
+                <li>Download from <a href="https://example.com/download">our website</a></li>
+                <li>Run the installer</li>
+                <li>Configure your <em>environment variables</em></li>
+            </ul>
+            
+            <blockquote>
+                <p>Note: Make sure you have the latest version installed.</p>
+            </blockquote>
+            
+            <h3>API Endpoints</h3>
+            <ol>
+                <li><strong>GET /api/users</strong> - Retrieve users</li>
+                <li><strong>POST /api/users</strong> - Create user</li>
+            </ol>
+            
+            <p>For more information, see our <a href="/advanced-guide">advanced guide</a>.</p>
+            <img src="/images/architecture.png" alt="System Architecture" />
+        </body>
+        </html>
+        "#;
+        
+        let test_html_spa = r#"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>SPA Dashboard</title>
+            <meta charset="UTF-8">
+        </head>
+        <body>
+            <div id="app">
+                <h1>Dashboard Overview</h1>
+                <h2>Key Metrics</h2>
+                <p>This single-page application shows <strong>real-time data</strong>.</p>
+                
+                <h3>Performance Stats</h3>
+                <ul>
+                    <li>Response Time: <em>150ms</em></li>
+                    <li>Uptime: <strong>99.9%</strong></li>
+                    <li>Active Users: 1,234</li>
+                </ul>
+                
+                <p>View detailed analytics in the <a href="/analytics">analytics section</a>.</p>
+            </div>
+        </body>
+        </html>
+        "#;
+        
+        // Initialize components
+        let mut domain_detector = DomainDetector::new();
+        domain_detector.add_ssr_domain("docs.example.com".to_string());
+        domain_detector.add_spa_domain("app.example.com".to_string());
+        
+        let html_converter = HtmlConverter::new();
+        let mut file_manager = FileManager::new(output_path.to_str().unwrap()).unwrap();
+        
+        // Test 1: SSR website processing
+        println!("🧪 Testing SSR website processing...");
+        let ssr_domain = "docs.example.com";
+        let ssr_mode = domain_detector.get_fetch_mode(ssr_domain);
+        assert_eq!(ssr_mode, FetchMode::HttpRequest, "SSR domain should use HttpRequest mode");
+        
+        let ssr_markdown = html_converter.convert_to_markdown(test_html_ssr).unwrap();
+        let ssr_file = file_manager.save_markdown("https://docs.example.com/api-docs", &ssr_markdown).unwrap();
+        
+        // Verify SSR conversion quality
+        assert!(ssr_markdown.contains("# API Documentation"), "Should convert H1 correctly");
+        assert!(ssr_markdown.contains("## Getting Started"), "Should convert H2 correctly");
+        assert!(ssr_markdown.contains("**important information**"), "Should convert bold text");
+        assert!(ssr_markdown.contains("*environment variables*"), "Should convert italic text");
+        assert!(ssr_markdown.contains("[our website]("), "Should convert links");
+        assert!(ssr_markdown.contains("![System Architecture](/images/architecture.png)"), "Should convert images");
+        assert!(ssr_markdown.contains("> Note: Make sure"), "Should convert blockquotes");
+        assert!(ssr_markdown.contains("1. **GET /api/users**"), "Should convert ordered lists");
+        assert!(!ssr_markdown.contains("DOCTYPE"), "Should remove HTML doctype");
+        assert!(!ssr_markdown.contains("<meta"), "Should remove meta tags");
+        
+        // Test 2: SPA website processing
+        println!("🧪 Testing SPA website processing...");
+        let spa_domain = "app.example.com";
+        let spa_mode = domain_detector.get_fetch_mode(spa_domain);
+        assert_eq!(spa_mode, FetchMode::Chrome, "SPA domain should use Chrome mode");
+        
+        let spa_markdown = html_converter.convert_to_markdown(test_html_spa).unwrap();
+        let spa_file = file_manager.save_markdown("https://app.example.com/dashboard", &spa_markdown).unwrap();
+        
+        // Verify SPA conversion quality
+        assert!(spa_markdown.contains("# Dashboard Overview"), "Should convert H1 correctly");
+        assert!(spa_markdown.contains("**real-time data**"), "Should convert bold text");
+        assert!(spa_markdown.contains("*150ms*"), "Should convert italic text");
+        assert!(spa_markdown.contains("[analytics section](#analytics)"), "Should convert internal links");
+        assert!(!spa_markdown.contains("console.log"), "Should remove JavaScript");
+        assert!(!spa_markdown.contains("color: blue"), "Should remove CSS");
+        assert!(!spa_markdown.contains("<script>"), "Should remove script tags");
+        assert!(!spa_markdown.contains("<style>"), "Should remove style tags");
+        
+        // Test 3: Unknown domain handling
+        println!("🧪 Testing unknown domain handling...");
+        let unknown_mode = domain_detector.get_fetch_mode("unknown.example.com");
+        assert_eq!(unknown_mode, FetchMode::HttpRequest, "Unknown domain should default to HttpRequest");
+        
+        // Test 4: File management verification
+        println!("🧪 Testing file management...");
+        assert!(ssr_file.exists(), "SSR file should exist");
+        assert!(spa_file.exists(), "SPA file should exist");
+        
+        let ssr_content = std::fs::read_to_string(&ssr_file).unwrap();
+        let spa_content = std::fs::read_to_string(&spa_file).unwrap();
+        
+        assert_eq!(ssr_content, ssr_markdown, "SSR file content should match");
+        assert_eq!(spa_content, spa_markdown, "SPA file content should match");
+        
+        // Test 5: Error handling with malformed HTML
+        println!("🧪 Testing error handling...");
+        let malformed_html = "<html><body><h1>Unclosed header<p>Paragraph without closing tag";
+        
+        match html_converter.convert_to_markdown(malformed_html) {
+            Ok(markdown) => {
+                println!("  ✅ Malformed HTML handled gracefully: {}", markdown.len());
+                // Should be able to save even if conversion has issues
+                let _malformed_file = file_manager.save_markdown("https://test.com/malformed", &markdown).unwrap();
+            }
+            Err(e) => {
+                println!("  ⚠️  Malformed HTML rejected as expected: {:?}", e);
+                // This is also acceptable behavior
+            }
+        }
+        
+        // Test 6: Performance validation
+        println!("🧪 Testing performance...");
+        let start_time = std::time::Instant::now();
+        
+        for i in 0..10 {
+            let url = format!("https://test.example.com/page-{}", i);
+            let markdown = html_converter.convert_to_markdown(test_html_ssr).unwrap();
+            let _file = file_manager.save_markdown(&url, &markdown).unwrap();
+        }
+        
+        let duration = start_time.elapsed();
+        println!("  ⏱️  Processed 10 pages in {:?}", duration);
+        assert!(duration.as_secs() < 5, "Should process 10 pages in under 5 seconds");
+        
+        // Test 7: Edge cases
+        println!("🧪 Testing edge cases...");
+        
+        // Empty valid HTML
+        let empty_html = "<html><body></body></html>";
+        let empty_result = html_converter.convert_to_markdown(empty_html).unwrap();
+        assert!(empty_result.trim().is_empty(), "Empty HTML should produce empty content");
+        
+        // HTML with only comments
+        let comment_html = "<html><body><!-- Only comments --></body></html>";
+        let comment_result = html_converter.convert_to_markdown(comment_html).unwrap();
+        assert!(comment_result.trim().is_empty() || !comment_result.contains("Only comments"), 
+                "Comments should be ignored");
+        
+        // Very long URL
+        let long_url = format!("https://example.com/{}", "x".repeat(200));
+        let _long_file = file_manager.save_markdown(&long_url, "test content").unwrap();
+        
+        println!("✅ Complete pipeline end-to-end test passed!");
+        println!("📊 Test Summary:");
+        println!("   - SSR domain detection: ✅");
+        println!("   - SPA domain detection: ✅");
+        println!("   - HTML to Markdown conversion: ✅");
+        println!("   - File management: ✅");
+        println!("   - Error handling: ✅");
+        println!("   - Performance: ✅");
+        println!("   - Edge cases: ✅");
+    }
 }

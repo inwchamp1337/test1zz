@@ -3,6 +3,18 @@ name = "test"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "test"
+path = "src/main.rs"
+
+[[bin]]
+name = "validate_pipeline"
+path = "validate_pipeline.rs"
+
+[lib]
+name = "test"
+path = "src/lib.rs"
+
 [dependencies]
 spider = { version = "2.37.159", features = ["chrome"] }
 tokio = { version = "1", features = ["full"] }
