@@ -2,7 +2,6 @@ use spider::url::Url;
 use spider::website::Website;
 use serde::Deserialize;
 use std::fs;
-use crate::crawler::domain_detector::FetchMode;
 
 /// โหลด `robots.txt` จาก base_url และคืน Vec<String> ของ sitemap URLs
 pub async fn get_sitemaps_from_robots(
@@ -159,102 +158,23 @@ pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-/// Fetch HTML from URLs with specified fetch mode
-/// Returns Vec<(String, String)> of (url, html_content)
+/// โหลด HTML จากแต่ละ URL ใน Vec<String>
+/// ใช้ HttpRequest เท่านั้น
+/// คืนค่า Vec<(String, String)> ของ (url, html_content)
 pub async fn fetch_html_from_urls(
     urls: Vec<String>,
-    fetch_mode: FetchMode,
 ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
     let mut results = Vec::new();
-    let total_urls = urls.len();
+    let total_urls = urls.len();  // คำนวณก่อน loop
 
-    let mode_str = match fetch_mode {
-        FetchMode::HttpRequest => "HttpRequest",
-        FetchMode::Chrome => "Chrome Browser",
-    };
-    
-    println!("- เริ่มโหลด HTML จาก {} URL(s) โดยใช้ {}", total_urls, mode_str);
+    println!("- เริ่มโหลด HTML จาก {} URL(s) โดยใช้ HttpRequest", total_urls);
 
     for url in urls {
         println!("  -> กำลังโหลด: {}", url);
 
-        // Configure website based on fetch mode
         let mut website = Website::new(&url);
         website.with_user_agent(Some("MyRustCrawler/1.0"));
         website.with_depth(0);  // โหลดเฉพาะหน้าเดียว
-
-        match fetch_mode {
-            FetchMode::HttpRequest => {
-                // Default HTTP request mode - no additional configuration needed
-            }
-            FetchMode::Chrome => {
-                // Enable Chrome browser mode for JavaScript rendering
-                println!("    -> Chrome mode requested for: {}", url);
-                // Note: Chrome configuration will be implemented when the API is available
-                // For now, this serves as a placeholder for Chrome-specific configuration
-            }
-        }
-
-        website.scrape().await;
-
-        // ดึง HTML content
-        if let Some(pages) = website.get_pages() {
-            if let Some(page) = pages.first() {
-                let html = page.get_html();
-                println!("  -> โหลดสำเร็จ: {} ({} bytes)", url, html.len());
-                results.push((url.clone(), html.to_string()));
-            } else {
-                eprintln!("  -> ไม่พบหน้าสำหรับ URL: {}", url);
-            }
-        } else {
-            eprintln!("  -> ไม่สามารถโหลดหน้าได้: {}", url);
-        }
-    }
-
-    println!("- โหลด HTML เสร็จสิ้น: {}/{} URL(s)", results.len(), total_urls);
-    Ok(results)
-}
-
-/// Fetch HTML from URLs using domain detector for automatic mode selection
-/// Returns Vec<(String, String)> of (url, html_content)
-pub async fn fetch_html_from_urls_with_detection(
-    urls: Vec<String>,
-    domain_detector: &crate::crawler::domain_detector::DomainDetector,
-) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
-    let mut results = Vec::new();
-    let total_urls = urls.len();
-
-    println!("- เริ่มโหลด HTML จาก {} URL(s) โดยใช้ auto-detection", total_urls);
-
-    for url in urls {
-        // Extract domain from URL for mode detection
-        let parsed_url = Url::parse(&url)?;
-        let domain = parsed_url.host_str().unwrap_or("");
-        let fetch_mode = domain_detector.get_fetch_mode(domain);
-        
-        let mode_str = match fetch_mode {
-            FetchMode::HttpRequest => "HttpRequest",
-            FetchMode::Chrome => "Chrome Browser",
-        };
-        
-        println!("  -> กำลังโหลด: {} (mode: {})", url, mode_str);
-
-        // Configure website based on detected fetch mode
-        let mut website = Website::new(&url);
-        website.with_user_agent(Some("MyRustCrawler/1.0"));
-        website.with_depth(0);  // โหลดเฉพาะหน้าเดียว
-
-        match fetch_mode {
-            FetchMode::HttpRequest => {
-                // Default HTTP request mode - no additional configuration needed
-            }
-            FetchMode::Chrome => {
-                // Enable Chrome browser mode for JavaScript rendering
-                println!("    -> Chrome mode requested for: {}", url);
-                // Note: Chrome configuration will be implemented when the API is available
-                // For now, this serves as a placeholder for Chrome-specific configuration
-            }
-        }
 
         website.scrape().await;
 
