@@ -8,6 +8,3 @@ spider = "2.37.159"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-spider_chrome = { version = "2.37.129", default-features = false, features = ["fetcher", "_fetcher-native-tokio"] }
-html2md = "0.2.15"
-futures = "0.3.31"
