@@ -2,20 +2,65 @@
 pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("เริ่มต้น Crawler สำหรับ: {}", domain);
 
+    // พยายามดึงจาก robots.txt ก่อน
     match super::robots::get_sitemaps_from_robots(domain).await {
         Ok(sitemaps) => {
             if sitemaps.is_empty() {
                 println!("-> ไม่พบ Sitemap URL ใน robots.txt");
+                // ถ้า robots.txt คืนค่าว่าง ให้ลองโหลด sitemap.xml ตรง ๆ
+                match super::robots::fetch_sitemap_direct(domain).await {
+                    Ok(direct_sitemaps) => {
+                        if direct_sitemaps.is_empty() {
+                            println!("-> ไม่พบ sitemap.xml ที่ {}/sitemap.xml", domain);
+                            return Ok(());
+                        } else {
+                            println!("-> พบ {} Sitemap URL(s) จาก sitemap.xml ตรง ๆ:", direct_sitemaps.len());
+                            for sitemap in &direct_sitemaps {
+                                println!("   - {}", sitemap);
+                            }
+                        }
+                    }
+                    Err(e2) => {
+                        eprintln!("-> ไม่สามารถโหลด sitemap.xml ได้: {:?}", e2);
+                        return Err(e2);
+                    }
+                }
             } else {
-                println!("-> พบ {} Sitemap URL(s):", sitemaps.len());
+                println!("-> พบ {} Sitemap URL(s) จาก robots.txt:", sitemaps.len());
                 for sitemap in &sitemaps {
                     println!("   - {}", sitemap);
+                }
+                if sitemaps.len() == 5 {
+                    println!("-> พบ 5 Sitemap URL จาก: robots.txt");
                 }
             }
         }
         Err(e) => {
-            eprintln!("-> ไม่สามารถโหลดหรือประมวลผล robots.txt ได้: {:?}", e);
-            return Err(e);
+            // ถ้าโหลด robots.txt ไม่ได้ ให้ลองโหลด sitemap.xml ตรง ๆ แทน
+            println!(
+                "-> ไม่สามารถโหลดหรือประมวลผล robots.txt ได้: {:?}\n   -> ลองโหลด sitemap.xml ตรง ๆ แทน...",
+                e
+            );
+            match super::robots::fetch_sitemap_direct(domain).await {
+                Ok(sitemaps) => {
+                    if sitemaps.is_empty() {
+                        println!("-> ไม่พบ sitemap.xml ที่ {}/sitemap.xml", domain);
+                        return Err(e);
+                    } else {
+                        println!("-> พบ {} Sitemap URL(s) จาก sitemap.xml ตรง ๆ:", sitemaps.len());
+                        for sitemap in &sitemaps {
+                            println!("   - {}", sitemap);
+                        }
+                        if sitemaps.len() == 5 {
+                            println!("-> พบ 5 Sitemap URL จาก: sitemap.xml ตรง ๆ");
+                        }
+                    }
+                }
+                Err(e2) => {
+                    eprintln!("-> ไม่สามารถโหลด sitemap.xml ได้: {:?}", e2);
+                    return Err(e2);
+                }
+            }
         }
     }
 
