@@ -47,13 +47,14 @@ pub async fn fetch_html_from_urls(
         // ตั้ง delay ถ้ามี (spider configuration)
         website.configuration.delay = delay_ms;
 
-        // ถ้ามีโหมด Chrome ให้ log ว่าเลือกโหมดนี้ แต่ยัง fallback เป็น scrape()
+        // Enable Chrome mode if selected (uses headless Chrome for JS rendering)
         if let FetchMode::Chrome = mode {
-            println!("[html_fetcher] Chrome mode requested — using spider.scrape() fallback. \
-                      To enable real Chrome/CDP behavior, update code to use the spider_chrome \
-                      API or the correct Configuration fields/methods for your crate version.");
-            // DON'T touch website.configuration.chrome_intercept here because the
-            // Configuration type in this build doesn't expose that field.
+            // Use the default request intercept configuration from the library
+            // to avoid requiring RequestInterceptConfiguration to be in scope.
+            website.with_chrome_intercept(Default::default());
+            println!("[html_fetcher] Chrome mode enabled - using headless Chrome for JS rendering");
+        } else {
+            println!("[html_fetcher] HttpRequest mode - using basic HTTP fetch");
         }
 
         // เรียก scrape / crawl (spider API) — ใช้ await

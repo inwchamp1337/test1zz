@@ -1,9 +1,10 @@
 use super::domain_detector::DomainDetector;
-use super::html_fetcher::{fetch_html_from_urls};
+use super::html_fetcher::{fetch_html_from_urls, FetchMode};
 use super::robots::{crawl_with_spider, fetch_sitemap_direct, get_sitemaps_from_robots};
 
 // use centralized config loader
 use crate::config::config::load_app_config;
+use crate::crawler::chrome_fetcher;
 
 
 
@@ -117,8 +118,17 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
             chosen_mode
         );
 
-        let html_results =
-            fetch_html_from_urls(sitemap_urls, chosen_mode, &user_agent, delay_ms).await?;
+        // Use chrome_fetcher when domain detector chooses Chrome, otherwise use existing fetcher
+        let html_results = match chosen_mode {
+            FetchMode::Chrome => {
+                println!("[crawler] launching chrome_fetcher for {} URLs", sitemap_urls.len());
+                chrome_fetcher::fetch_with_chrome(sitemap_urls, &user_agent).await?
+            }
+            _ => {
+                println!("[crawler] using http fetcher for {} URLs", sitemap_urls.len());
+                fetch_html_from_urls(sitemap_urls, chosen_mode, &user_agent, delay_ms).await?
+            }
+        };
 
         for (url, html) in html_results {
             println!("✓ ดาวน์โหลดแล้ว: {} ({} bytes)", url, html.len());

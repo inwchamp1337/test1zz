@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::env;
 use std::fs;
 use std::path::Path;
 
@@ -8,6 +9,7 @@ pub struct AppConfig {
     pub user_agent: Option<String>,
     pub delay_ms: Option<u64>,
     pub whitelist_path: Option<String>,
+    pub chrome_executable: Option<String>, // new field
 }
 
 impl Default for AppConfig {
@@ -16,6 +18,7 @@ impl Default for AppConfig {
             user_agent: Some("MyRustCrawler/1.0".into()),
             delay_ms: Some(250),
             whitelist_path: Some("src/config/whitelist.yaml".into()),
+            chrome_executable: None,
         }
     }
 }
@@ -29,6 +32,13 @@ pub fn load_app_config() -> AppConfig {
             match fs::read_to_string(p) {
                 Ok(s) => match serde_yaml::from_str::<AppConfig>(&s) {
                     Ok(cfg) => {
+                        // if yaml specifies chrome_executable, export it to env for chrome_fetcher / chromiumoxide
+                        if let Some(ref exe) = cfg.chrome_executable {
+                            unsafe {
+                                env::set_var("CHROME_EXECUTABLE", exe);
+                            }
+                            println!("[config] set CHROME_EXECUTABLE={}", exe);
+                        }
                         println!("[config] loaded {}", p);
                         return cfg;
                     }
