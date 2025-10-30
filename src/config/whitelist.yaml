@@ -1,0 +1,128 @@
+# /D:/vibescode/x/HiHi/src/config/whitelist.yaml
+# ตรวจสอบจาก domain เท่านั้น (ห้ามตรวจสอบจากเนื้อหา HTML)
+# auto_mode: ถ้า true ระบบจะเลือกโหมดอัตโนมัติตามรายการด้านล่าง
+# mode: "SPA" => ใช้ Chrome (headless/browser)
+#       "SSR" => ใช้ HttpRequest (server-side fetch)
+# handler: ชื่อวิธีการ fetch ที่ระบบจะเรียกใช้ (แนะนำ: "chrome" หรือ "http")
+
+auto_mode: true
+default_mode: "SPA"   # ถ้าโดเมนไม่อยู่ในรายการ ให้ใช้โหมดนี้
+match_on: "domain_only"
+
+whitelist:
+  # โดเมน SPA ทั่วไป (Single Page Applications - ใช้ Chrome สำหรับ JavaScript rendering)
+  - domain: "www.heygoody.com"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "reactjs.org"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "vuejs.org"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "angular.io"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "nextjs.org"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "nuxtjs.org"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "svelte.dev"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "gatsbyjs.com"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "vercel.app"
+    mode: "SPA"
+    handler: "chrome"
+    match: "subdomain"  # รวม subdomain เช่น *.vercel.app
+
+  - domain: "netlify.app"
+    mode: "SPA"
+    handler: "chrome"
+    match: "subdomain"
+
+  # โดเมน SSR ทั่วไป (Server-Side Rendering - ใช้ HttpRequest สำหรับ static/server-rendered content)
+  - domain: "www.example.com"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "wordpress.com"
+    mode: "SSR"
+    handler: "http"
+    match: "subdomain"
+
+  - domain: "drupal.org"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "joomla.org"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "github.io"
+    mode: "SSR"
+    handler: "http"
+    match: "subdomain"
+
+  - domain: "docs.rs"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "rust-lang.org"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "staticgen.com"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "jekyllrb.com"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "shop.heygoody.com"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "api.example.com"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"
+
+  - domain: "vibescode.dev"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"
+
+  - domain: "static.example.com"
+    mode: "SSR"
+    handler: "http"
+    match: "exact"

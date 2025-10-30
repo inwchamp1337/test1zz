@@ -1,3 +1,4 @@
-// โมดูล root ของโฟลเดอร์ crawler — ประกาศ submodules ให้ชัดเจน
-pub mod robots;
 pub mod crawler;
+pub mod robots;
+pub mod html_fetcher;
+pub mod domain_detector;

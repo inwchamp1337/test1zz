@@ -1,5 +1,5 @@
+mod config;
 mod crawler;
-
 use std::env;
 
 #[tokio::main]

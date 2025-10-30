@@ -98,6 +98,7 @@ struct SpiderConfig {
     user_agent: Option<String>,
     delay_ms: Option<u64>,
     max_pages: Option<usize>,
+    fetch_mode: Option<String>,
 }
 
 impl Default for SpiderConfig {
@@ -107,6 +108,7 @@ impl Default for SpiderConfig {
             user_agent: Some("MyRustCrawler/1.0".into()),
             delay_ms: Some(200),
             max_pages: Some(100),
+            fetch_mode: Some("Chrome".into()),
         }
     }
 }
@@ -130,8 +132,8 @@ pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error:
     };
 
     println!("- เริ่ม native spider crawl ที่: {}", base_url);
-    println!("- config: depth={:?}, user_agent={:?}, delay_ms={:?}, max_pages={:?}",
-        cfg.depth, cfg.user_agent, cfg.delay_ms, cfg.max_pages);
+    println!("- config: depth={:?}, user_agent={:?}, delay_ms={:?}, max_pages={:?}, fetch_mode={:?}",
+        cfg.depth, cfg.user_agent, cfg.delay_ms, cfg.max_pages, cfg.fetch_mode);
 
     let mut website = Website::new(base_url);
     website.with_user_agent(cfg.user_agent.as_deref());
@@ -158,40 +160,4 @@ pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-/// โหลด HTML จากแต่ละ URL ใน Vec<String>
-/// ใช้ HttpRequest เท่านั้น
-/// คืนค่า Vec<(String, String)> ของ (url, html_content)
-pub async fn fetch_html_from_urls(
-    urls: Vec<String>,
-) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
-    let mut results = Vec::new();
-    let total_urls = urls.len();  // คำนวณก่อน loop
 
-    println!("- เริ่มโหลด HTML จาก {} URL(s) โดยใช้ HttpRequest", total_urls);
-
-    for url in urls {
-        println!("  -> กำลังโหลด: {}", url);
-
-        let mut website = Website::new(&url);
-        website.with_user_agent(Some("MyRustCrawler/1.0"));
-        website.with_depth(0);  // โหลดเฉพาะหน้าเดียว
-
-        website.scrape().await;
-
-        // ดึง HTML content
-        if let Some(pages) = website.get_pages() {
-            if let Some(page) = pages.first() {
-                let html = page.get_html();
-                println!("  -> โหลดสำเร็จ: {} ({} bytes)", url, html.len());
-                results.push((url.clone(), html.to_string()));
-            } else {
-                eprintln!("  -> ไม่พบหน้าสำหรับ URL: {}", url);
-            }
-        } else {
-            eprintln!("  -> ไม่สามารถโหลดหน้าได้: {}", url);
-        }
-    }
-
-    println!("- โหลด HTML เสร็จสิ้น: {}/{} URL(s)", results.len(), total_urls);
-    Ok(results)
-}
