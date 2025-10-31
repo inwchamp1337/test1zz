@@ -126,14 +126,3 @@ cargo test
 | `sitemap_max_depth` | Max sitemap nesting | 5 |
 | `max_sitemap_urls` | Max URLs from sitemaps | 5 |
 
-## License
-
-This project is open source. See LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
