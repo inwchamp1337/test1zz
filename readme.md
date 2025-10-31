@@ -30,7 +30,7 @@ cargo run -- "https://ssr-site.com"
 
 ```bash
 # Case 1: Website with robots.txt
-cargo run -- "https://www.heygoody.com/"
+cargo run -- "https://www.muangthai.co.th/th"
 
 # Case 2: Direct sitemap.xml testing
 cargo run -- "https://thewhitemarketing.com/"
