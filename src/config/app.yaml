@@ -1,10 +1,17 @@
 depth: 1
-user_agent: "SSS/1.0"
-delay_ms: 50
-max_pages: 5
-fetch_mode: "Chrome"  # หรือ "Chrome"
+user_agent: "MADEE/1.0"
+delay_ms: 2
 whitelist_path: "src/config/whitelist.yaml"
 #chrome_executable: C:\chrome-win\chrome.exe
 native_download_mode: "HttpRequest"  # หรือ "Chrome"
-sitemap_max_depth: 5  # รองรับ sitemap ซ้อนกันได้สูงสุด 5 ชั้น
+sitemap_max_depth: 0  # รองรับ sitemap ซ้อนกันได้สูงสุด 5 ชั้น
 max_sitemap_urls: 5  # จำกัดจำนวน URL จาก sitemap สูงสุด
+
+# # Force Chrome mode for all sites
+# fetch_mode: "Chrome"
+
+# # Force HttpRequest mode for all sites  
+# fetch_mode: "HttpRequest"
+
+# # Let the system auto-detect (default)
+# # fetch_mode: (comment out or remove)

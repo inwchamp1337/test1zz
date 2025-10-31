@@ -29,16 +29,34 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
             DomainDetector::default()
         });
 
-    // determine fetch mode automatically based on domain whitelist
-    let chosen_mode = detector.get_fetch_mode_for_domain(domain);
-    let mode_name = match chosen_mode {
-        FetchMode::Chrome => "SPA (Chrome/JavaScript)",
-        FetchMode::HttpRequest => "SSR (HttpRequest)",
+    // determine fetch mode: config override takes precedence over auto-detection
+    let chosen_mode = if let Some(ref mode_str) = cfg.fetch_mode {
+        match mode_str.to_lowercase().as_str() {
+            "chrome" => {
+                println!("[config] fetch_mode='{}' -> forced Chrome mode", mode_str);
+                FetchMode::Chrome
+            }
+            "httprequest" | "http" => {
+                println!("[config] fetch_mode='{}' -> forced HttpRequest mode", mode_str);
+                FetchMode::HttpRequest
+            }
+            _ => {
+                println!("[config] unknown fetch_mode='{}', falling back to auto-detection", mode_str);
+                detector.get_fetch_mode_for_domain(domain)
+            }
+        }
+    } else {
+        let auto_mode = detector.get_fetch_mode_for_domain(domain);
+        let mode_name = match auto_mode {
+            FetchMode::Chrome => "SPA (Chrome/JavaScript)",
+            FetchMode::HttpRequest => "SSR (HttpRequest)",
+        };
+        println!(
+            "[domain_detector] domain={} -> auto-detected fetch mode={:?} [{}]",
+            domain, auto_mode, mode_name
+        );
+        auto_mode
     };
-    println!(
-        "[domain_detector] domain={} -> chosen fetch mode={:?} [{}]",
-        domain, chosen_mode, mode_name
-    );
 
     // gather sitemap URLs
     let mut sitemap_urls: Vec<String> = Vec::new();

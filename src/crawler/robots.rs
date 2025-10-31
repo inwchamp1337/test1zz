@@ -3,8 +3,6 @@ use spider::website::Website;
 use serde::Deserialize;
 use std::fs;
 use std::collections::HashSet;
-// load centralized app config for user_agent/delay/sitemap depth
-use crate::config::config::load_app_config;
 
 /// โหลด `robots.txt` จาก base_url และคืน Vec<String> ของ sitemap URLs
 pub async fn get_sitemaps_from_robots(
@@ -46,78 +44,6 @@ pub async fn get_sitemaps_from_robots(
 
 /// ลองดึง sitemap.xml โดยตรงจาก https://<host>/sitemap.xml
 /// คืน Vec<String> ของ URL ที่เจอภายใน <loc> tags (และพิมพ์ออกมาทันทีเมื่อเจอ)
-pub async fn fetch_sitemap_direct(base_url: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let parsed = Url::parse(base_url)?;
-    let sitemap_url = parsed.join("/sitemap.xml")?.to_string();
-
-    println!("- ลองโหลด sitemap ตรง ๆ: {}", sitemap_url);
-
-    let mut website = Website::new(&sitemap_url);
-    // use centralized config values if present
-    let cfg = load_app_config();
-    let ua = cfg.user_agent.clone().unwrap_or_else(|| "MyRustCrawler/1.0".into());
-    let delay = cfg.delay_ms.unwrap_or(0);
-    let sitemap_max_depth = cfg.sitemap_max_depth.unwrap_or(5);
-
-    website.with_user_agent(Some(ua.as_str()));
-    website.with_depth(0);
-
-    website.configuration.delay = delay;
-    website.scrape().await;
-
-    let pages = website.get_pages();
-    if pages.is_none() || pages.as_ref().unwrap().is_empty() {
-        // ไม่พบหรือดึงไม่ได้
-        return Ok(Vec::new());
-    }
-
-    let page = pages.unwrap().first().ok_or("ไม่พบหน้าในเวกเตอร์ pages")?;
-    let content = page.get_html();
-
-    // หา <loc> ... </loc> แบบไม่ขึ้นกับ case
-    let mut nested_sitemaps: Vec<String> = Vec::new();
-    let mut page_urls: Vec<String> = Vec::new();
-    let content_lower = content.to_lowercase();
-    let mut pos = 0usize;
-    while let Some(start_rel) = content_lower[pos..].find("<loc") {
-        let start = pos + start_rel;
-        // หาตำแหน่ง '>' ของแท็กเปิด
-        if let Some(gt_rel) = content_lower[start..].find('>') {
-            let content_start = start + gt_rel + 1;
-            // หาตัวปิด </loc>
-            if let Some(end_rel) = content_lower[content_start..].find("</loc>") {
-                let content_end = content_start + end_rel;
-                let url_text = content[content_start..content_end].trim().to_string();
-                if !url_text.is_empty() {
-                    // ถ้าเป็น sitemap index (.xml) ให้เก็บไปโหลดแบบ recursive
-                    if url_text.ends_with(".xml") || url_text.contains(".xml?") {
-                        println!("-> พบ sitemap index: {}", url_text);
-                        nested_sitemaps.push(url_text);
-                    } else {
-                        println!("-> พบ URL ใน sitemap.xml: {}", url_text);
-                        page_urls.push(url_text);
-                    }
-                }
-                pos = content_end + 6; // ข้าม "</loc>"
-                continue;
-            }
-        }
-        break;
-    }
-
-    // ถ้ามี nested sitemaps ให้โหลดแบบ recursive เพื่อรวบรวมหน้า
-    if !nested_sitemaps.is_empty() {
-        let mut visited = HashSet::new();
-        for s in nested_sitemaps {
-            match fetch_sitemap_recursive(&s, &ua, delay, &mut visited, 0, sitemap_max_depth).await {
-                Ok(mut urls) => page_urls.append(&mut urls),
-                Err(e) => eprintln!("-> ไม่สามารถโหลด nested sitemap {}: {:?}", s, e),
-            }
-        }
-    }
-
-    Ok(page_urls)
-}
 
 /// โหลด sitemap แบบ recursive - รองรับ sitemap index (nested)
 /// ใช้ config จาก AppConfig (user_agent, delay_ms)
