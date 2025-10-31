@@ -11,7 +11,6 @@ pub struct AppConfig {
     pub whitelist_path: Option<String>,
     pub chrome_executable: Option<String>,
     pub native_download_mode: Option<String>,
-    pub fetch_mode: Option<String>, // override auto-detection: "Chrome" or "HttpRequest"
     pub depth: Option<usize>,
     pub max_pages: Option<usize>,
     pub sitemap_max_depth: Option<usize>, // สำหรับ recursive sitemap loading
@@ -26,11 +25,10 @@ impl Default for AppConfig {
             whitelist_path: Some("src/config/whitelist.yaml".into()),
             chrome_executable: None,
             native_download_mode: Some("HttpRequest".into()),
-            fetch_mode: None, // None = auto-detect, Some("Chrome") or Some("HttpRequest") = force mode
             depth: Some(3),
             max_pages: Some(200),
             sitemap_max_depth: Some(5), // รองรับ sitemap ซ้อนได้ 5 ชั้น
-            max_sitemap_urls: Some(100), // default 100 URLs from sitemap
+            max_sitemap_urls: Some(100), // จำกัด URL จาก sitemap 100 URLs ตาม default
         }
     }
 }
