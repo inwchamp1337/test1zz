@@ -126,3 +126,8 @@ whitelist:
     mode: "SSR"
     handler: "http"
     match: "exact"
+
+  - domain: "leerob.com"
+    mode: "SPA"
+    handler: "chrome"
+    match: "exact"

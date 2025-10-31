@@ -2,6 +2,9 @@ use spider::url::Url;
 use spider::website::Website;
 use serde::Deserialize;
 use std::fs;
+use std::collections::HashSet;
+// load centralized app config for user_agent/delay/sitemap depth
+use crate::config::config::load_app_config;
 
 /// โหลด `robots.txt` จาก base_url และคืน Vec<String> ของ sitemap URLs
 pub async fn get_sitemaps_from_robots(
@@ -50,9 +53,16 @@ pub async fn fetch_sitemap_direct(base_url: &str) -> Result<Vec<String>, Box<dyn
     println!("- ลองโหลด sitemap ตรง ๆ: {}", sitemap_url);
 
     let mut website = Website::new(&sitemap_url);
-    website.with_user_agent(Some("MyRustCrawler/1.0".into()));
+    // use centralized config values if present
+    let cfg = load_app_config();
+    let ua = cfg.user_agent.clone().unwrap_or_else(|| "MyRustCrawler/1.0".into());
+    let delay = cfg.delay_ms.unwrap_or(0);
+    let sitemap_max_depth = cfg.sitemap_max_depth.unwrap_or(5);
+
+    website.with_user_agent(Some(ua.as_str()));
     website.with_depth(0);
 
+    website.configuration.delay = delay;
     website.scrape().await;
 
     let pages = website.get_pages();
@@ -65,7 +75,8 @@ pub async fn fetch_sitemap_direct(base_url: &str) -> Result<Vec<String>, Box<dyn
     let content = page.get_html();
 
     // หา <loc> ... </loc> แบบไม่ขึ้นกับ case
-    let mut sitemap_urls = Vec::new();
+    let mut nested_sitemaps: Vec<String> = Vec::new();
+    let mut page_urls: Vec<String> = Vec::new();
     let content_lower = content.to_lowercase();
     let mut pos = 0usize;
     while let Some(start_rel) = content_lower[pos..].find("<loc") {
@@ -78,8 +89,14 @@ pub async fn fetch_sitemap_direct(base_url: &str) -> Result<Vec<String>, Box<dyn
                 let content_end = content_start + end_rel;
                 let url_text = content[content_start..content_end].trim().to_string();
                 if !url_text.is_empty() {
-                    println!("-> พบ URL ใน sitemap.xml: {}", url_text);
-                    sitemap_urls.push(url_text);
+                    // ถ้าเป็น sitemap index (.xml) ให้เก็บไปโหลดแบบ recursive
+                    if url_text.ends_with(".xml") || url_text.contains(".xml?") {
+                        println!("-> พบ sitemap index: {}", url_text);
+                        nested_sitemaps.push(url_text);
+                    } else {
+                        println!("-> พบ URL ใน sitemap.xml: {}", url_text);
+                        page_urls.push(url_text);
+                    }
                 }
                 pos = content_end + 6; // ข้าม "</loc>"
                 continue;
@@ -88,7 +105,111 @@ pub async fn fetch_sitemap_direct(base_url: &str) -> Result<Vec<String>, Box<dyn
         break;
     }
 
-    Ok(sitemap_urls)
+    // ถ้ามี nested sitemaps ให้โหลดแบบ recursive เพื่อรวบรวมหน้า
+    if !nested_sitemaps.is_empty() {
+        let mut visited = HashSet::new();
+        for s in nested_sitemaps {
+            match fetch_sitemap_recursive(&s, &ua, delay, &mut visited, 0, sitemap_max_depth).await {
+                Ok(mut urls) => page_urls.append(&mut urls),
+                Err(e) => eprintln!("-> ไม่สามารถโหลด nested sitemap {}: {:?}", s, e),
+            }
+        }
+    }
+
+    Ok(page_urls)
+}
+
+/// โหลด sitemap แบบ recursive - รองรับ sitemap index (nested)
+/// ใช้ config จาก AppConfig (user_agent, delay_ms)
+/// - ถ้า <loc> ชี้ไปที่ .xml -> โหลดต่อแบบ recursive
+/// - ถ้า <loc> เป็น URL ปกติ -> เก็บไว้
+/// คืนค่า Vec<String> ของ URL ทั้งหมด (ไม่ซ้ำ)
+pub async fn fetch_sitemap_recursive(
+    sitemap_url: &str,
+    user_agent: &str,
+    delay_ms: u64,
+    visited: &mut HashSet<String>,
+    depth: usize,
+    max_depth: usize,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    // ป้องกัน infinite loop และ depth เกิน
+    if visited.contains(sitemap_url) || depth > max_depth {
+        return Ok(Vec::new());
+    }
+    visited.insert(sitemap_url.to_string());
+
+    println!("[sitemap][depth={}] กำลังโหลด: {}", depth, sitemap_url);
+
+    let mut website = Website::new(sitemap_url);
+    website.with_user_agent(Some(user_agent.into()));
+    website.with_depth(0);
+    website.configuration.delay = delay_ms;
+
+    website.scrape().await;
+
+    let pages = website.get_pages();
+    if pages.is_none() || pages.as_ref().unwrap().is_empty() {
+        println!("[sitemap][depth={}] ไม่พบหน้าที่ดาวน์โหลดได้", depth);
+        return Ok(Vec::new());
+    }
+
+    let page = pages.unwrap().first().ok_or("ไม่พบหน้าในเวกเตอร์ pages")?;
+    let content = page.get_html();
+
+    // หา <loc> ... </loc>
+    let mut sitemap_urls = Vec::new();
+    let mut page_urls = Vec::new();
+    
+    let content_lower = content.to_lowercase();
+    let mut pos = 0usize;
+    
+    while let Some(start_rel) = content_lower[pos..].find("<loc") {
+        let start = pos + start_rel;
+        if let Some(gt_rel) = content_lower[start..].find('>') {
+            let content_start = start + gt_rel + 1;
+            if let Some(end_rel) = content_lower[content_start..].find("</loc>") {
+                let content_end = content_start + end_rel;
+                let url_text = content[content_start..content_end].trim().to_string();
+                
+                if !url_text.is_empty() {
+                    // ตรวจสอบว่าเป็น sitemap (.xml) หรือ URL ปกติ
+                    if url_text.ends_with(".xml") || url_text.contains(".xml?") {
+                        println!("[sitemap][depth={}] -> พบ sitemap nested: {}", depth, url_text);
+                        sitemap_urls.push(url_text);
+                    } else {
+                        println!("[sitemap][depth={}] -> พบ URL: {}", depth, url_text);
+                        page_urls.push(url_text);
+                    }
+                }
+                pos = content_end + 6;
+                continue;
+            }
+        }
+        break;
+    }
+
+    // Recursive: โหลด sitemap ที่ซ้อนกัน (ใช้ Box::pin เพื่อหลีกเลี่ยง infinite size)
+    for nested_sitemap in sitemap_urls {
+        let result = Box::pin(fetch_sitemap_recursive(
+            &nested_sitemap,
+            user_agent,
+            delay_ms,
+            visited,
+            depth + 1,
+            max_depth,
+        )).await;
+        
+        match result {
+            Ok(mut nested_urls) => {
+                page_urls.append(&mut nested_urls);
+            }
+            Err(e) => {
+                eprintln!("[sitemap][depth={}] ไม่สามารถโหลด {} ได้: {:?}", depth, nested_sitemap, e);
+            }
+        }
+    }
+
+    Ok(page_urls)
 }
 
 /// Config สำหรับการ crawl แบบ native โดย spider
@@ -147,27 +268,29 @@ pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error:
 
     website.scrape().await;
 
-    // แสดง URL ที่ถูกดาวน์โหลด
+    // แสดง URL ที่ถูกดาวน์โหลด และแปลง + บันทึกเป็น Markdown
     if let Some(pages) = website.get_pages() {
         println!("[log] pages downloaded count: {}", pages.len());
-        let urls: Vec<String> = pages.iter().map(|page| page.get_url().to_string()).collect();
-        let mode_str = cfg.native_download_mode.clone().unwrap_or_else(|| "HttpRequest".into());
-        let delay = cfg.delay_ms.unwrap_or(0);
-        let ua = cfg.user_agent.clone().unwrap_or_else(|| "MyRustCrawler/1.0".into());
-
-        if !urls.is_empty() {
-            match super::html_fetcher::FetchMode::from_str(&mode_str) {
-                super::html_fetcher::FetchMode::HttpRequest => {
-                    let _ = super::html_fetcher::fetch_html_from_urls(urls.clone(), super::html_fetcher::FetchMode::HttpRequest, &ua, delay).await?;
-                }
-                super::html_fetcher::FetchMode::Chrome => {
-                    let _ = crate::crawler::chrome_fetcher::fetch_with_chrome(urls.clone(), &ua, delay).await?;
-                }
+        
+        // Process each page: convert HTML -> Markdown -> save file
+        let total = pages.len() as f64;
+        for (idx, page) in pages.iter().enumerate() {
+            let current = idx + 1;
+            let percent = if total > 0.0 { (current as f64 / total) * 100.0 } else { 0.0 };
+            let url = page.get_url().to_string();
+            let html = page.get_html();
+            
+            println!("\n[{}/{}] ({:.1}%) Processing: {}", current, pages.len(), percent, url);
+            println!("-> visited: {} ({} bytes HTML)", url, html.len());
+            
+            // Convert to markdown
+            let markdown = super::html_to_markdown::html_to_markdown(&url, &html);
+            
+            // Save immediately
+            match super::markdown_writer::write_markdown_file(&url, &markdown) {
+                Ok(path) => println!("✓ บันทึกแล้ว: {} — {:.1}%", path.display(), percent),
+                Err(err) => eprintln!("✗ บันทึกไม่สำเร็จ {}: {:?} — {:.1}%", url, err, percent),
             }
-        }
-
-        for page in pages {
-            println!("-> visited: {}", page.get_url());
         }
     } else {
         println!("-> spider ไม่ได้ดาวน์โหลดหน้าใด ๆ");

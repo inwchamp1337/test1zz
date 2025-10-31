@@ -10,7 +10,11 @@ pub struct AppConfig {
     pub delay_ms: Option<u64>,
     pub whitelist_path: Option<String>,
     pub chrome_executable: Option<String>,
-    pub native_download_mode: Option<String>, 
+    pub native_download_mode: Option<String>,
+    pub depth: Option<usize>,
+    pub max_pages: Option<usize>,
+    pub sitemap_max_depth: Option<usize>, // สำหรับ recursive sitemap loading
+    pub max_sitemap_urls: Option<usize>, // จำกัดจำนวน URL จาก sitemap
 }
 
 impl Default for AppConfig {
@@ -21,6 +25,10 @@ impl Default for AppConfig {
             whitelist_path: Some("src/config/whitelist.yaml".into()),
             chrome_executable: None,
             native_download_mode: Some("HttpRequest".into()),
+            depth: Some(3),
+            max_pages: Some(200),
+            sitemap_max_depth: Some(5), // รองรับ sitemap ซ้อนได้ 5 ชั้น
+            max_sitemap_urls: Some(100), // จำกัด URL จาก sitemap 100 URLs ตาม default
         }
     }
 }
@@ -39,6 +47,18 @@ pub fn load_app_config() -> AppConfig {
                             println!("[config] set CHROME_EXECUTABLE={}", exe);
                         }
                         println!("[config] loaded {}", p);
+                        // Print all known config fields for visibility
+                        println!(
+                            "[config] values: user_agent={:?}, delay_ms={:?}, whitelist_path={:?}, chrome_executable={:?}, native_download_mode={:?}, depth={:?}, max_pages={:?}, sitemap_max_depth={:?}",
+                            cfg.user_agent,
+                            cfg.delay_ms,
+                            cfg.whitelist_path,
+                            cfg.chrome_executable,
+                            cfg.native_download_mode,
+                            cfg.depth,
+                            cfg.max_pages,
+                            cfg.sitemap_max_depth
+                        );
                         return cfg; // ensure we return the parsed config
                     }
                     Err(e) => {
@@ -52,5 +72,18 @@ pub fn load_app_config() -> AppConfig {
         }
     }
     println!("[config] using default app config");
-    AppConfig::default()
+    let default_cfg = AppConfig::default();
+    // Print default values as well
+    println!(
+        "[config] default values: user_agent={:?}, delay_ms={:?}, whitelist_path={:?}, chrome_executable={:?}, native_download_mode={:?}, depth={:?}, max_pages={:?}, sitemap_max_depth={:?}",
+        default_cfg.user_agent,
+        default_cfg.delay_ms,
+        default_cfg.whitelist_path,
+        default_cfg.chrome_executable,
+        default_cfg.native_download_mode,
+        default_cfg.depth,
+        default_cfg.max_pages,
+        default_cfg.sitemap_max_depth
+    );
+    default_cfg
 }
