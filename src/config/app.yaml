@@ -1,7 +1,10 @@
-depth: 3
+depth: 1
 user_agent: "SSS/1.0"
-delay_ms: 250
-max_pages: 200
+delay_ms: 50
+max_pages: 5
 fetch_mode: "Chrome"  # หรือ "Chrome"
 whitelist_path: "src/config/whitelist.yaml"
-chrome_executable: C:\chrome-win\chrome.exe
+#chrome_executable: C:\chrome-win\chrome.exe
+native_download_mode: "HttpRequest"  # หรือ "Chrome"
+sitemap_max_depth: 5  # รองรับ sitemap ซ้อนกันได้สูงสุด 5 ชั้น
+max_sitemap_urls: 5  # จำกัดจำนวน URL จาก sitemap สูงสุด

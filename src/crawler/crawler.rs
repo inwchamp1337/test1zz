@@ -1,10 +1,12 @@
 use super::domain_detector::DomainDetector;
 use super::html_fetcher::{fetch_html_from_urls, FetchMode};
-use super::robots::{crawl_with_spider, fetch_sitemap_direct, get_sitemaps_from_robots};
+use super::html_to_markdown::html_to_markdown;
+use super::markdown_writer::write_markdown_file;
+use super::robots::{crawl_with_spider, get_sitemaps_from_robots, fetch_sitemap_recursive};
+use std::collections::HashSet;
 
 // use centralized config loader
 use crate::config::config::load_app_config;
-use crate::crawler::chrome_fetcher;
 
 
 
@@ -17,6 +19,8 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
     let cfg = load_app_config();
     let user_agent = cfg.user_agent.clone().unwrap_or_else(|| "MyRustCrawler/1.0".into());
     let delay_ms = cfg.delay_ms.unwrap_or(250);
+    let sitemap_max_depth = cfg.sitemap_max_depth.unwrap_or(5);
+    let max_sitemap_urls = cfg.max_sitemap_urls.unwrap_or(100);
 
     // load whitelist detector (if available)
     let mut detector = DomainDetector::from_file(cfg.whitelist_path.as_deref().unwrap_or("src/config/whitelist.yaml"))
@@ -27,9 +31,13 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
 
     // determine fetch mode automatically based on domain whitelist
     let chosen_mode = detector.get_fetch_mode_for_domain(domain);
+    let mode_name = match chosen_mode {
+        FetchMode::Chrome => "SPA (Chrome/JavaScript)",
+        FetchMode::HttpRequest => "SSR (HttpRequest)",
+    };
     println!(
-        "[domain_detector] domain={} -> chosen fetch mode={:?}",
-        domain, chosen_mode
+        "[domain_detector] domain={} -> chosen fetch mode={:?} [{}]",
+        domain, chosen_mode, mode_name
     );
 
     // gather sitemap URLs
@@ -40,13 +48,19 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
             println!("[log] get_sitemaps_from_robots returned {} entry(ies)", sitemaps.len());
             if sitemaps.is_empty() {
                 println!("-> ไม่พบ Sitemap URL ใน robots.txt");
-                match fetch_sitemap_direct(domain).await {
-                    Ok(direct_sitemaps) => {
+                
+                // ลอง /sitemap.xml ตรง ๆ แบบ recursive
+                let parsed = spider::url::Url::parse(domain)?;
+                let sitemap_url = parsed.join("/sitemap.xml")?.to_string();
+                let mut visited = HashSet::new();
+                
+                match fetch_sitemap_recursive(&sitemap_url, &user_agent, delay_ms, &mut visited, 0, sitemap_max_depth).await {
+                    Ok(recursive_sitemaps) => {
                         println!(
-                            "[log] fetch_sitemap_direct returned {} entry(ies)",
-                            direct_sitemaps.len()
+                            "[log] fetch_sitemap_recursive returned {} entry(ies)",
+                            recursive_sitemaps.len()
                         );
-                        if direct_sitemaps.is_empty() {
+                        if recursive_sitemaps.is_empty() {
                             let pretty = domain.trim_end_matches('/');
                             println!("-> ไม่พบ sitemap.xml ที่ {}/sitemap.xml", pretty);
                             // fallback to native spider crawl
@@ -54,13 +68,10 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
                             return Ok(());
                         } else {
                             println!(
-                                "-> พบ {} Sitemap URL(s) จาก sitemap.xml ตรง ๆ:",
-                                direct_sitemaps.len()
+                                "-> พบ {} URL(s) จาก sitemap recursive:",
+                                recursive_sitemaps.len()
                             );
-                            for s in &direct_sitemaps {
-                                println!("   - {}", s);
-                            }
-                            sitemap_urls.extend(direct_sitemaps);
+                            sitemap_urls.extend(recursive_sitemaps);
                         }
                     }
                     Err(e) => {
@@ -70,10 +81,21 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
                 }
             } else {
                 println!("-> พบ {} Sitemap URL(s) จาก robots.txt:", sitemaps.len());
-                for s in &sitemaps {
-                    println!("   - {}", s);
+                
+                // โหลดแต่ละ sitemap แบบ recursive
+                let mut visited = HashSet::new();
+                for sitemap_url in sitemaps {
+                    println!("   - กำลังโหลด sitemap: {}", sitemap_url);
+                    match fetch_sitemap_recursive(&sitemap_url, &user_agent, delay_ms, &mut visited, 0, sitemap_max_depth).await {
+                        Ok(urls) => {
+                            println!("     -> พบ {} URL(s)", urls.len());
+                            sitemap_urls.extend(urls);
+                        }
+                        Err(e) => {
+                            eprintln!("     -> ไม่สามารถโหลด {} ได้: {:?}", sitemap_url, e);
+                        }
+                    }
                 }
-                sitemap_urls.extend(sitemaps);
             }
         }
         Err(e) => {
@@ -81,19 +103,22 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
                 "[log] get_sitemaps_from_robots returned error: {:?}\n   -> ลองโหลด sitemap.xml ตรง ๆ แทน...",
                 e
             );
-            match fetch_sitemap_direct(domain).await {
+            
+            // ลอง /sitemap.xml ตรง ๆ แบบ recursive
+            let parsed = spider::url::Url::parse(domain)?;
+            let sitemap_url = parsed.join("/sitemap.xml")?.to_string();
+            let mut visited = HashSet::new();
+            
+            match fetch_sitemap_recursive(&sitemap_url, &user_agent, delay_ms, &mut visited, 0, sitemap_max_depth).await {
                 Ok(sitemaps) => {
-                    println!("[log] fetch_sitemap_direct returned {} entry(ies)", sitemaps.len());
+                    println!("[log] fetch_sitemap_recursive returned {} entry(ies)", sitemaps.len());
                     if sitemaps.is_empty() {
                         let pretty = domain.trim_end_matches('/');
                         println!("-> ไม่พบ sitemap.xml ที่ {}/sitemap.xml", pretty);
                         crawl_with_spider(domain).await?;
                         return Ok(());
                     } else {
-                        println!("-> พบ {} Sitemap URL(s) จาก sitemap.xml ตรง ๆ:", sitemaps.len());
-                        for s in &sitemaps {
-                            println!("   - {}", s);
-                        }
+                        println!("-> พบ {} URL(s) จาก sitemap recursive:", sitemaps.len());
                         sitemap_urls.extend(sitemaps);
                     }
                 }
@@ -107,32 +132,48 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
 
     // If we have sitemap URLs -> fetch HTML using chosen fetch mode
     if !sitemap_urls.is_empty() {
-        println!("-> URLs to fetch ({}):", sitemap_urls.len());
-        for u in &sitemap_urls {
-            println!("   - {}", u);
+        // Apply URL limit from config
+        if sitemap_urls.len() > max_sitemap_urls {
+            println!("-> จำกัดจำนวน URL จาก {} เป็น {} URLs (ตาม config max_sitemap_urls)", 
+                sitemap_urls.len(), max_sitemap_urls);
+            sitemap_urls.truncate(max_sitemap_urls);
         }
 
-        println!(
-            "\n--- เริ่มโหลด HTML จาก {} sitemap URLs (mode: {:?}) ---",
-            sitemap_urls.len(),
-            chosen_mode
-        );
-
-        // Use chrome_fetcher when domain detector chooses Chrome, otherwise use existing fetcher
-        let html_results = match chosen_mode {
-            FetchMode::Chrome => {
-                println!("[crawler] launching chrome_fetcher for {} URLs", sitemap_urls.len());
-                chrome_fetcher::fetch_with_chrome(sitemap_urls, &user_agent, delay_ms).await?
-            }
-            _ => {
-                println!("[crawler] using http fetcher for {} URLs", sitemap_urls.len());
-                fetch_html_from_urls(sitemap_urls, chosen_mode, &user_agent, delay_ms).await?
-            }
+        let mode_str = match chosen_mode {
+            FetchMode::Chrome => "SPA (Chrome/JavaScript)",
+            FetchMode::HttpRequest => "SSR (HttpRequest)",
         };
+        println!(
+            "\n--- เริ่มโหลด HTML จาก {} sitemap URLs (mode: {}) ---",
+            sitemap_urls.len(),
+            mode_str
+        );
+        
+        // Process URLs one by one: download -> convert -> save immediately
+        let total = sitemap_urls.len() as f64;
+        for (idx, url) in sitemap_urls.iter().enumerate() {
+            let current = idx + 1;
+            let percent = if total > 0.0 { (current as f64 / total) * 100.0 } else { 0.0 };
+            println!("\n[{}/{}] ({:.1}%) กำลังดาวน์โหลด: {}", current, sitemap_urls.len(), percent, url);
 
-        for (url, html) in html_results {
-            println!("✓ ดาวน์โหลดแล้ว: {} ({} bytes)", url, html.len());
-            // TODO: save or process html
+            // Fetch single URL
+            let html_results = fetch_html_from_urls(vec![url.clone()], chosen_mode, &user_agent, delay_ms).await?;
+
+            // Process result immediately
+            if let Some((fetched_url, html)) = html_results.into_iter().next() {
+                println!("✓ ดาวน์โหลดแล้ว: {} ({} bytes) — {:.1}%", fetched_url, html.len(), percent);
+
+                // Convert to markdown
+                let markdown = html_to_markdown(&fetched_url, &html);
+
+                // Save immediately
+                match write_markdown_file(&fetched_url, &markdown) {
+                    Ok(path) => println!("✓ บันทึกแล้ว: {} — {:.1}%", path.display(), percent),
+                    Err(err) => eprintln!("✗ บันทึกไม่สำเร็จ {}: {:?} — {:.1}%", fetched_url, err, percent),
+                }
+            } else {
+                eprintln!("✗ ดาวน์โหลดไม่สำเร็จ: {} — {:.1}%", url, percent);
+            }
         }
     }
 

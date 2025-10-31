@@ -1,7 +1,4 @@
-use std::time::Duration;
-use spider::website::Website;
-use spider::compact_str::CompactString;
-use tokio::time::sleep;
+use crate::crawler::chrome_fetcher;
 
 /// โหมดการโหลด HTML
 #[derive(Debug, Clone, Copy)]
@@ -30,8 +27,38 @@ pub async fn fetch_html_from_urls(
     user_agent: &str,
     delay_ms: u64,
 ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    let mode_label = match mode {
+        FetchMode::Chrome => "SPA (Chrome/JavaScript)",
+        FetchMode::HttpRequest => "SSR (HttpRequest)",
+    };
+    println!("[html_fetcher] fetch_html_from_urls mode={:?} [{}] total_urls={}", mode, mode_label, urls.len());
+
+    match mode {
+        FetchMode::Chrome => {
+            // ใช้ chrome_fetcher สำหรับโหมด Chrome
+            println!("[html_fetcher] ⚡ SPA Mode - using fetch_with_chrome function");
+            chrome_fetcher::fetch_with_chrome(urls, user_agent, delay_ms).await
+        }
+        FetchMode::HttpRequest => {
+            // ใช้ HttpRequest แบบเดิมสำหรับโหมด SSR
+            println!("[html_fetcher] 📄 SSR Mode - using basic HTTP fetch (no JavaScript)");
+            fetch_with_http_request(urls, user_agent, delay_ms).await
+        }
+    }
+}
+
+/// โหลด HTML โดยใช้ HttpRequest (สำหรับ SSR)
+async fn fetch_with_http_request(
+    urls: Vec<String>,
+    user_agent: &str,
+    delay_ms: u64,
+) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    use std::time::Duration;
+    use spider::website::Website;
+    use spider::compact_str::CompactString;
+    use tokio::time::sleep;
+
     let mut results = Vec::new();
-    println!("[html_fetcher] fetch_html_from_urls mode={:?} total_urls={}", mode, urls.len());
 
     for url in urls {
         println!("[html_fetcher] start -> {}", url);
@@ -47,22 +74,27 @@ pub async fn fetch_html_from_urls(
         // ตั้ง delay ถ้ามี (spider configuration)
         website.configuration.delay = delay_ms;
 
-        // Enable Chrome mode if selected (uses headless Chrome for JS rendering)
-        if let FetchMode::Chrome = mode {
-            // Use the default request intercept configuration from the library
-            // to avoid requiring RequestInterceptConfiguration to be in scope.
-            website.with_chrome_intercept(Default::default());
-            println!("[html_fetcher] Chrome mode enabled - using headless Chrome for JS rendering");
-        } else {
-            println!("[html_fetcher] HttpRequest mode - using basic HTTP fetch");
-        }
+        // Log internal configuration for visibility
+        println!(
+            "[html_fetcher] config -> user_agent={:?}, delay_ms={}, depth={}",
+            website.configuration.user_agent.as_ref().map(|b| b.as_ref()),
+            website.configuration.delay,
+            website.configuration.depth
+        );
 
         // เรียก scrape / crawl (spider API) — ใช้ await
+        let t0 = std::time::Instant::now();
+        println!("[html_fetcher] scrape start: {}", url);
         website.scrape().await;
+        let took = t0.elapsed();
+        println!("[html_fetcher] scrape done: {} (took {:?})", url, took);
 
         // พิมพ์ข้อมูล pages ที่ได้ (debug)
         if let Some(pages) = website.get_pages() {
             println!("[html_fetcher] pages returned: {}", pages.len());
+            for (i, page) in pages.iter().enumerate() {
+                println!("  [page {}] url={} (html_len={})", i + 1, page.get_url(), page.get_html().len());
+            }
             if let Some(page) = pages.first() {
                 let html = page.get_html().to_string();
                 println!("[html_fetcher] fetched {} bytes from {}", html.len(), url);
