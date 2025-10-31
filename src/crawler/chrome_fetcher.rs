@@ -29,6 +29,6 @@ pub async fn fetch_with_chrome(
             sleep(Duration::from_millis(delay_ms)).await;
         }
     }
-
+    println!("[chrome_fetcher] finished, got {} pages", results.len());
     Ok(results)
 }

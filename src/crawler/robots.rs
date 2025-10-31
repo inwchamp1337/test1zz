@@ -98,7 +98,7 @@ struct SpiderConfig {
     user_agent: Option<String>,
     delay_ms: Option<u64>,
     max_pages: Option<usize>,
-    fetch_mode: Option<String>,
+    native_download_mode: Option<String>, // <- NEW
 }
 
 impl Default for SpiderConfig {
@@ -106,9 +106,9 @@ impl Default for SpiderConfig {
         Self {
             depth: Some(3),
             user_agent: Some("MyRustCrawler/1.0".into()),
-            delay_ms: Some(200),
-            max_pages: Some(100),
-            fetch_mode: Some("Chrome".into()),
+            delay_ms: Some(250),
+            max_pages: Some(200),
+            native_download_mode: Some("HttpRequest".into()), // <- NEW
         }
     }
 }
@@ -133,7 +133,7 @@ pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error:
 
     println!("- เริ่ม native spider crawl ที่: {}", base_url);
     println!("- config: depth={:?}, user_agent={:?}, delay_ms={:?}, max_pages={:?}, fetch_mode={:?}",
-        cfg.depth, cfg.user_agent, cfg.delay_ms, cfg.max_pages, cfg.fetch_mode);
+        cfg.depth, cfg.user_agent, cfg.delay_ms, cfg.max_pages, cfg.native_download_mode);
 
     let mut website = Website::new(base_url);
     website.with_user_agent(cfg.user_agent.as_deref());
@@ -149,9 +149,25 @@ pub async fn crawl_with_spider(base_url: &str) -> Result<(), Box<dyn std::error:
 
     // แสดง URL ที่ถูกดาวน์โหลด
     if let Some(pages) = website.get_pages() {
+        println!("[log] pages downloaded count: {}", pages.len());
+        let urls: Vec<String> = pages.iter().map(|page| page.get_url().to_string()).collect();
+        let mode_str = cfg.native_download_mode.clone().unwrap_or_else(|| "HttpRequest".into());
+        let delay = cfg.delay_ms.unwrap_or(0);
+        let ua = cfg.user_agent.clone().unwrap_or_else(|| "MyRustCrawler/1.0".into());
+
+        if !urls.is_empty() {
+            match super::html_fetcher::FetchMode::from_str(&mode_str) {
+                super::html_fetcher::FetchMode::HttpRequest => {
+                    let _ = super::html_fetcher::fetch_html_from_urls(urls.clone(), super::html_fetcher::FetchMode::HttpRequest, &ua, delay).await?;
+                }
+                super::html_fetcher::FetchMode::Chrome => {
+                    let _ = crate::crawler::chrome_fetcher::fetch_with_chrome(urls.clone(), &ua, delay).await?;
+                }
+            }
+        }
+
         for page in pages {
-            let url = page.get_url();
-            println!("-> visited: {}", url);
+            println!("-> visited: {}", page.get_url());
         }
     } else {
         println!("-> spider ไม่ได้ดาวน์โหลดหน้าใด ๆ");

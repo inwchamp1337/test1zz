@@ -1,5 +1,7 @@
 use super::domain_detector::DomainDetector;
 use super::html_fetcher::{fetch_html_from_urls, FetchMode};
+use super::html_to_markdown::html_to_markdown;
+use super::markdown_writer::write_markdown_file;
 use super::robots::{crawl_with_spider, fetch_sitemap_direct, get_sitemaps_from_robots};
 
 // use centralized config loader
@@ -107,32 +109,20 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
 
     // If we have sitemap URLs -> fetch HTML using chosen fetch mode
     if !sitemap_urls.is_empty() {
-        println!("-> URLs to fetch ({}):", sitemap_urls.len());
-        for u in &sitemap_urls {
-            println!("   - {}", u);
-        }
-
         println!(
-            "\n--- เริ่มโหลด HTML จาก {} sitemap URLs (mode: {:?}) ---",
+            "\n--- เริ่มโหลด HTML จาก {} sitemap URLs (mode: {}) ---",
             sitemap_urls.len(),
-            chosen_mode
+            fetch_mode_str
         );
-
-        // Use chrome_fetcher when domain detector chooses Chrome, otherwise use existing fetcher
-        let html_results = match chosen_mode {
-            FetchMode::Chrome => {
-                println!("[crawler] launching chrome_fetcher for {} URLs", sitemap_urls.len());
-                chrome_fetcher::fetch_with_chrome(sitemap_urls, &user_agent, delay_ms).await?
-            }
-            _ => {
-                println!("[crawler] using http fetcher for {} URLs", sitemap_urls.len());
-                fetch_html_from_urls(sitemap_urls, chosen_mode, &user_agent, delay_ms).await?
-            }
-        };
-
+        let html_results =
+            fetch_html_from_urls(sitemap_urls, fetch_mode, &user_agent, delay_ms).await?;
         for (url, html) in html_results {
             println!("✓ ดาวน์โหลดแล้ว: {} ({} bytes)", url, html.len());
-            // TODO: save or process html
+            let markdown = html_to_markdown(&url, &html);
+            match write_markdown_file(&url, &markdown) {
+                Ok(path) => println!("[markdown] saved {}", path.display()),
+                Err(err) => eprintln!("[markdown] failed to save {}: {:?}", url, err),
+            }
         }
     }
 

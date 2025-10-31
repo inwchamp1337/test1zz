@@ -9,7 +9,8 @@ pub struct AppConfig {
     pub user_agent: Option<String>,
     pub delay_ms: Option<u64>,
     pub whitelist_path: Option<String>,
-    pub chrome_executable: Option<String>, // new field
+    pub chrome_executable: Option<String>,
+    pub native_download_mode: Option<String>, // <- NEW
 }
 
 impl Default for AppConfig {
@@ -19,6 +20,7 @@ impl Default for AppConfig {
             delay_ms: Some(250),
             whitelist_path: Some("src/config/whitelist.yaml".into()),
             chrome_executable: None,
+            native_download_mode: Some("HttpRequest".into()), // <- NEW
         }
     }
 }
@@ -32,15 +34,12 @@ pub fn load_app_config() -> AppConfig {
             match fs::read_to_string(p) {
                 Ok(s) => match serde_yaml::from_str::<AppConfig>(&s) {
                     Ok(cfg) => {
-                        // if yaml specifies chrome_executable, export it to env for chrome_fetcher / chromiumoxide
                         if let Some(ref exe) = cfg.chrome_executable {
-                            unsafe {
-                                env::set_var("CHROME_EXECUTABLE", exe);
-                            }
+                            unsafe { env::set_var("CHROME_EXECUTABLE", exe); }
                             println!("[config] set CHROME_EXECUTABLE={}", exe);
                         }
                         println!("[config] loaded {}", p);
-                        return cfg;
+                        return cfg; // ensure we return the parsed config
                     }
                     Err(e) => {
                         eprintln!("[config] failed parse {}: {:?}", p, e);
