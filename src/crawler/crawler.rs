@@ -109,13 +109,17 @@ pub async fn run_crawler(domain: &str) -> Result<(), Box<dyn std::error::Error>>
 
     // If we have sitemap URLs -> fetch HTML using chosen fetch mode
     if !sitemap_urls.is_empty() {
+        let mode_str = match chosen_mode {
+            FetchMode::Chrome => "Chrome",
+            FetchMode::HttpRequest => "HttpRequest",
+        };
         println!(
             "\n--- เริ่มโหลด HTML จาก {} sitemap URLs (mode: {}) ---",
             sitemap_urls.len(),
-            fetch_mode_str
+            mode_str
         );
         let html_results =
-            fetch_html_from_urls(sitemap_urls, fetch_mode, &user_agent, delay_ms).await?;
+            fetch_html_from_urls(sitemap_urls, chosen_mode, &user_agent, delay_ms).await?;
         for (url, html) in html_results {
             println!("✓ ดาวน์โหลดแล้ว: {} ({} bytes)", url, html.len());
             let markdown = html_to_markdown(&url, &html);

@@ -10,7 +10,7 @@ pub struct AppConfig {
     pub delay_ms: Option<u64>,
     pub whitelist_path: Option<String>,
     pub chrome_executable: Option<String>,
-    pub native_download_mode: Option<String>, // <- NEW
+    pub native_download_mode: Option<String>, 
 }
 
 impl Default for AppConfig {
@@ -20,7 +20,7 @@ impl Default for AppConfig {
             delay_ms: Some(250),
             whitelist_path: Some("src/config/whitelist.yaml".into()),
             chrome_executable: None,
-            native_download_mode: Some("HttpRequest".into()), // <- NEW
+            native_download_mode: Some("HttpRequest".into()),
         }
     }
 }
